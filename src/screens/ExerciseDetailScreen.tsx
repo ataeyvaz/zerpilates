@@ -18,6 +18,7 @@ import { EXERCISE_MAP } from '../constants/exercises';
 import { RootStackParamList } from '../types';
 import ExerciseAnimation from '../components/ExerciseAnimation';
 import AUDIO_ASSETS from '../constants/audioAssets';
+import { useOrientation } from '../hooks/useOrientation';
 
 type Route = RouteProp<RootStackParamList, 'ExerciseDetail'>;
 type Nav = StackNavigationProp<RootStackParamList>;
@@ -81,7 +82,119 @@ export default function ExerciseDetailScreen() {
 
   const lvlColor = levelColor(exercise.level);
   const aColor   = areaColor(exercise.bodyArea);
+  const { isLandscape, height: screenHeight } = useOrientation();
 
+  // ── Landscape layout ──────────────────────────────────────
+  if (isLandscape) {
+    return (
+      <SafeAreaView style={[styles.safe, ls.safe]}>
+        <StatusBar barStyle="dark-content" backgroundColor={Colors.cream} />
+
+        {/* LEFT — animation */}
+        <View style={[ls.left, { backgroundColor: aColor + '18' }]}>
+          <TouchableOpacity style={ls.backBtn} onPress={() => navigation.goBack()}>
+            <Text style={ls.backText}>‹</Text>
+          </TouchableOpacity>
+          <ExerciseAnimation
+            exerciseId={exercise.id}
+            height={screenHeight * 0.65}
+            showInstructions={false}
+            autoPlay
+          />
+          {/* Intro audio */}
+          {audioAssets && (
+            <TouchableOpacity
+              style={[ls.audioBtn, playingStep === 99 && ls.audioBtnActive]}
+              onPress={() =>
+                playingStep === 99 ? stopSound() : playAudio(audioAssets.intro, 99)
+              }
+            >
+              <Text style={ls.audioBtnText}>
+                {playingStep === 99 ? '⏹ Durdur' : '▶ Tanıtım'}
+              </Text>
+            </TouchableOpacity>
+          )}
+        </View>
+
+        {/* RIGHT — details */}
+        <ScrollView
+          style={ls.right}
+          contentContainerStyle={ls.rightContent}
+          showsVerticalScrollIndicator={false}
+        >
+          {/* Name + badges */}
+          <Text style={ls.title}>{exercise.name}</Text>
+          <View style={ls.badgeRow}>
+            <View style={[ls.badge, { backgroundColor: lvlColor + '20', borderColor: lvlColor }]}>
+              <Text style={[ls.badgeText, { color: lvlColor }]}>{levelLabel(exercise.level)}</Text>
+            </View>
+            <View style={[ls.badge, { backgroundColor: aColor + '20', borderColor: aColor }]}>
+              <Text style={[ls.badgeText, { color: aColor }]}>{areaLabel(exercise.bodyArea)}</Text>
+            </View>
+          </View>
+
+          <Text style={ls.description}>{exercise.description}</Text>
+
+          {/* Instructions */}
+          <Text style={ls.sectionTitle}>Nasıl Yapılır</Text>
+          {exercise.instructions.map((step, i) => (
+            <View key={i} style={ls.step}>
+              <View style={ls.stepNum}>
+                <Text style={ls.stepNumText}>{i + 1}</Text>
+              </View>
+              <Text style={ls.stepText}>{step}</Text>
+              {audioAssets?.steps[i] && (
+                <TouchableOpacity
+                  style={ls.stepAudioBtn}
+                  onPress={() =>
+                    playingStep === i ? stopSound() : playAudio(audioAssets.steps[i], i)
+                  }
+                >
+                  <Text style={[ls.stepAudioIcon, playingStep === i && { color: Colors.terracotta }]}>
+                    {playingStep === i ? '⏹' : '▶'}
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          ))}
+
+          {/* Sesli rehberlik toggle */}
+          {audioAssets?.full && (
+            <View style={ls.toggleRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={ls.toggleLabel}>Sesli rehberlik</Text>
+                <Text style={ls.toggleSub}>Başlayınca tüm aşamaları seslendir</Text>
+              </View>
+              <Switch
+                value={autoPlayFull}
+                onValueChange={handleToggleAudio}
+                trackColor={{ false: Colors.border, true: Colors.sage }}
+                thumbColor={Colors.white}
+              />
+            </View>
+          )}
+
+          {/* Start button */}
+          <TouchableOpacity
+            style={ls.startBtn}
+            onPress={() =>
+              navigation.navigate('Warmup', {
+                exerciseIds: [exercise.id],
+                playFullAudio: autoPlayFull,
+              })
+            }
+            activeOpacity={0.85}
+          >
+            <Text style={ls.startBtnText}>Bu Hareketi Başlat</Text>
+          </TouchableOpacity>
+
+          <View style={{ height: 24 }} />
+        </ScrollView>
+      </SafeAreaView>
+    );
+  }
+
+  // ── Portrait layout (unchanged) ───────────────────────────
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="dark-content" backgroundColor={Colors.cream} />
@@ -378,4 +491,177 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   startBtnText: { fontSize: 16, fontWeight: '700', color: Colors.white, letterSpacing: 0.3 },
+});
+
+// ── Landscape styles ───────────────────────────────────────
+const ls = StyleSheet.create({
+  safe: {
+    flexDirection: 'row',
+  },
+
+  // Left column — animation
+  left: {
+    width: '42%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 10,
+    position: 'relative',
+  },
+  backBtn: {
+    position: 'absolute',
+    top: 10,
+    left: 12,
+    zIndex: 10,
+    padding: 6,
+  },
+  backText: {
+    fontSize: 26,
+    color: Colors.sage,
+    fontWeight: '600',
+  },
+  audioBtn: {
+    marginTop: 10,
+    backgroundColor: Colors.sagePale,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderColor: Colors.sageLight,
+  },
+  audioBtnActive: {
+    backgroundColor: Colors.sage + '20',
+    borderColor: Colors.sage,
+  },
+  audioBtnText: {
+    fontSize: 13,
+    color: Colors.sageDark,
+    fontWeight: '600',
+  },
+
+  // Right column — scrollable content
+  right: {
+    flex: 1,
+  },
+  rightContent: {
+    paddingHorizontal: 20,
+    paddingTop: 14,
+    paddingBottom: 20,
+  },
+
+  title: {
+    fontSize: 26,
+    fontWeight: '800',
+    color: Colors.text,
+    letterSpacing: -0.5,
+    marginBottom: 8,
+  },
+  badgeRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 10,
+  },
+  badge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  badgeText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  description: {
+    fontSize: 15,
+    color: Colors.textLight,
+    lineHeight: 22,
+    marginBottom: 14,
+  },
+
+  sectionTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: Colors.textMuted,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    marginBottom: 10,
+  },
+
+  step: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 10,
+  },
+  stepNum: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: Colors.sage,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
+    marginTop: 1,
+    flexShrink: 0,
+  },
+  stepNumText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: Colors.white,
+  },
+  stepText: {
+    flex: 1,
+    fontSize: 18,
+    color: Colors.text,
+    lineHeight: 26,
+  },
+  stepAudioBtn: {
+    marginLeft: 8,
+    padding: 4,
+  },
+  stepAudioIcon: {
+    fontSize: 13,
+    color: Colors.sage,
+  },
+
+  toggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.white,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    marginTop: 14,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  toggleLabel: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: Colors.text,
+  },
+  toggleSub: {
+    fontSize: 12,
+    color: Colors.textMuted,
+    marginTop: 1,
+  },
+
+  startBtn: {
+    backgroundColor: Colors.sage,
+    borderRadius: 14,
+    paddingVertical: 14,
+    alignItems: 'center',
+    marginTop: 6,
+    shadowColor: Colors.sage,
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 3,
+  },
+  startBtnText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: Colors.white,
+    letterSpacing: 0.3,
+  },
 });

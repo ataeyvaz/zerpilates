@@ -20,6 +20,7 @@ import { EXERCISE_MAP, EXERCISES } from '../constants/exercises';
 import { logWorkout } from '../store/storage';
 import AUDIO_ASSETS from '../constants/audioAssets';
 import ExerciseAnimation from '../components/ExerciseAnimation';
+import { useOrientation } from '../hooks/useOrientation';
 
 type SafeParams = { planId?: string; exerciseIds?: string[]; playFullAudio?: boolean };
 
@@ -32,6 +33,16 @@ const STROKE = 14;
 const RADIUS = (RING_SIZE - STROKE) / 2;
 const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
 
+// TV / landscape ring
+const TV_RING   = 200;
+const TV_STROKE = 12;
+const TV_RADIUS = (TV_RING - TV_STROKE) / 2;
+const TV_CIRC   = 2 * Math.PI * TV_RADIUS;
+
+const TV_BG      = '#2C3E35';
+const TV_TEXT    = '#F5F0E8';
+const TV_MUTED   = '#A8C4B0';
+
 // Nefes döngüsü: 4s nefes al + 4s nefes ver
 const BREATH_INHALE = 4;
 const BREATH_EXHALE = 4;
@@ -41,6 +52,7 @@ export default function TimerScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute();
   const params = ((route as any).params ?? {}) as SafeParams;
+  const { isLandscape, height: screenHeight } = useOrientation();
 
   const exerciseIds: string[] = params?.exerciseIds?.length
     ? params.exerciseIds
@@ -181,9 +193,9 @@ export default function TimerScreen() {
     }
   }, [isInhale, breathScale, breathOpacity]);
 
-  // ── Sessiz modda talimat döngüsü ─────────────────────────
+  // ── Talimat döngüsü — sessiz mod veya landscape/TV ───────
   useEffect(() => {
-    if (!silentMode || !running || phase !== 'work') return;
+    if ((!silentMode && !isLandscape) || !running || phase !== 'work') return;
     const ex = EXERCISE_MAP[exerciseIds[exerciseIdx]];
     if (!ex) return;
     const count = ex.instructions.length;
@@ -192,7 +204,7 @@ export default function TimerScreen() {
       setInstrIdx((i) => (i + 1) % count);
     }, secPerStep * 1000);
     return () => clearInterval(t);
-  }, [silentMode, running, exerciseIdx, phase, exerciseIds, workDuration]);
+  }, [silentMode, isLandscape, running, exerciseIdx, phase, exerciseIds, workDuration]);
 
   // exerciseIdx değişince talimat sıfırla
   useEffect(() => { setInstrIdx(0); }, [exerciseIdx]);
@@ -297,6 +309,123 @@ export default function TimerScreen() {
     const sec = s % 60;
     return `${m}:${sec.toString().padStart(2, '0')}`;
   };
+
+  // ── TV / LANDSCAPE layout ─────────────────────────────────
+  const tvOffset = TV_CIRC * (1 - progress);
+
+  if (isLandscape) {
+    const animHeight = Math.min(screenHeight * 0.52, 260);
+    return (
+      <View style={tv.root}>
+        <StatusBar hidden />
+
+        {/* LEFT column */}
+        <View style={tv.left}>
+          <ExerciseAnimation
+            exerciseId={exerciseIds[exerciseIdx]}
+            height={animHeight}
+            showInstructions={false}
+            autoPlay={running}
+          />
+          <Text style={tv.exerciseName} numberOfLines={2}>
+            {currentExercise?.name ?? ''}
+          </Text>
+
+          {/* Breath guide */}
+          {running && phase === 'work' && (
+            <View style={tv.breathWrap}>
+              <Animated.View
+                style={[
+                  tv.breathCircle,
+                  {
+                    backgroundColor: breathColor + '35',
+                    borderColor: breathColor + 'AA',
+                    transform: [{ scale: breathScale }],
+                    opacity: breathOpacity,
+                  },
+                ]}
+              />
+              <Text style={[tv.breathLabel, { color: breathColor }]}>
+                {breathLabel}
+              </Text>
+            </View>
+          )}
+        </View>
+
+        {/* RIGHT column */}
+        <View style={tv.right}>
+          {/* Phase + set */}
+          <View style={[tv.phaseBadge, { borderColor: ringColor + '60' }]}>
+            <Text style={[tv.phaseText, { color: ringColor }]}>
+              {phase === 'work' ? '● Çalış' : '◎ Dinlen'}
+            </Text>
+            <Text style={tv.setInfo}>
+              {setCount}/{totalSets}  ·  {currentExercise?.reps} tekrar
+            </Text>
+          </View>
+
+          {/* Countdown ring */}
+          <View style={tv.ringWrap}>
+            <Svg width={TV_RING} height={TV_RING}>
+              <Circle
+                cx={TV_RING / 2} cy={TV_RING / 2} r={TV_RADIUS}
+                stroke={TV_MUTED + '40'} strokeWidth={TV_STROKE} fill="none"
+              />
+              <Circle
+                cx={TV_RING / 2} cy={TV_RING / 2} r={TV_RADIUS}
+                stroke={ringColor} strokeWidth={TV_STROKE} fill="none"
+                strokeDasharray={`${TV_CIRC} ${TV_CIRC}`}
+                strokeDashoffset={tvOffset}
+                strokeLinecap="round"
+                rotation="-90"
+                origin={`${TV_RING / 2}, ${TV_RING / 2}`}
+              />
+            </Svg>
+            <View style={tv.ringCenter}>
+              <Text style={tv.timeText}>{formatTime(timeLeft)}</Text>
+              <Text style={tv.timeLabel}>{phase === 'work' ? 'saniye' : 'dinlenme'}</Text>
+            </View>
+          </View>
+
+          {/* Current instruction */}
+          {currentExercise && phase === 'work' && (
+            <View style={tv.instrWrap}>
+              <Text style={tv.instrText} numberOfLines={3}>
+                {currentExercise.instructions[instrIdx] ?? ''}
+              </Text>
+              {currentExercise.instructions[instrIdx + 1] && (
+                <Text style={tv.instrNext} numberOfLines={2}>
+                  Sonraki: {currentExercise.instructions[instrIdx + 1]}
+                </Text>
+              )}
+            </View>
+          )}
+
+          {/* Step dots */}
+          {currentExercise && (
+            <View style={tv.dots}>
+              {currentExercise.instructions.map((_, i) => (
+                <View
+                  key={i}
+                  style={[tv.dot, i === instrIdx && tv.dotActive]}
+                />
+              ))}
+            </View>
+          )}
+
+          {/* Silent badge */}
+          {silentMode && (
+            <Text style={tv.silentBadge}>🔇 Sessiz Mod</Text>
+          )}
+
+          {/* Exercise progress */}
+          <Text style={tv.exerciseProgress}>
+            {exerciseIdx + 1} / {totalExercises}
+          </Text>
+        </View>
+      </View>
+    );
+  }
 
   // ── TIMER screen ─────────────────────────────────────────
   return (
@@ -573,4 +702,154 @@ const styles = StyleSheet.create({
   queueName:  { flex: 1, fontSize: 14, fontWeight: '500', color: Colors.textLight },
   queueMeta:  { fontSize: 12, color: Colors.textMuted },
   queueEmpty: { fontSize: 14, color: Colors.sage, fontStyle: 'italic', textAlign: 'center', paddingVertical: 10 },
+});
+
+// ── TV / Landscape styles ──────────────────────────────────
+const tv = StyleSheet.create({
+  root: {
+    flex: 1,
+    flexDirection: 'row',
+    backgroundColor: TV_BG,
+  },
+
+  // Left column — 45%
+  left: {
+    width: '45%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    gap: 12,
+  },
+  exerciseName: {
+    fontSize: 28,
+    fontWeight: '800',
+    color: TV_TEXT,
+    textAlign: 'center',
+    letterSpacing: -0.5,
+  },
+
+  // Breath guide
+  breathWrap: {
+    alignItems: 'center',
+    height: 100,
+    justifyContent: 'center',
+  },
+  breathCircle: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    borderWidth: 2,
+    position: 'absolute',
+  },
+  breathLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    paddingTop: 90,
+  },
+
+  // Right column — 55%
+  right: {
+    width: '55%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    gap: 10,
+  },
+
+  phaseBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    borderWidth: 1,
+    borderRadius: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 5,
+  },
+  phaseText: {
+    fontSize: 15,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+  setInfo: {
+    fontSize: 13,
+    color: TV_MUTED,
+    fontWeight: '500',
+  },
+
+  // Ring
+  ringWrap: {
+    width: TV_RING,
+    height: TV_RING,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  ringCenter: {
+    position: 'absolute',
+    alignItems: 'center',
+  },
+  timeText: {
+    fontSize: 46,
+    fontWeight: '200',
+    color: TV_TEXT,
+    letterSpacing: -2,
+  },
+  timeLabel: {
+    fontSize: 12,
+    color: TV_MUTED,
+    marginTop: 2,
+  },
+
+  // Instructions
+  instrWrap: {
+    width: '100%',
+    backgroundColor: '#ffffff12',
+    borderRadius: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    gap: 8,
+  },
+  instrText: {
+    fontSize: 22,
+    fontWeight: '600',
+    color: TV_TEXT,
+    lineHeight: 32,
+    textAlign: 'center',
+  },
+  instrNext: {
+    fontSize: 16,
+    color: TV_MUTED,
+    textAlign: 'center',
+    lineHeight: 22,
+  },
+
+  // Step dots
+  dots: {
+    flexDirection: 'row',
+    gap: 6,
+    alignItems: 'center',
+  },
+  dot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: TV_MUTED + '50',
+  },
+  dotActive: {
+    backgroundColor: TV_TEXT,
+    width: 18,
+    borderRadius: 4,
+  },
+
+  silentBadge: {
+    fontSize: 14,
+    color: TV_MUTED,
+    fontWeight: '600',
+  },
+  exerciseProgress: {
+    fontSize: 13,
+    color: TV_MUTED,
+    fontWeight: '500',
+  },
 });
